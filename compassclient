@@ -1,0 +1,61 @@
+local RunService = game:GetService("RunService")
+local cam       = workspace.CurrentCamera
+local compass  = script.Parent
+compass.ClipsDescendants = true
+
+-- tune these to your taste:
+local numTicks = 7        -- how many marks across the bar
+local spanDeg  = 90       -- total degrees shown (±spanDeg/2 from center)
+
+-- cardinal labels
+local cards = {
+	[0]   = "N",  [90]  = "E",
+	[180] = "S",  [270] = "W",
+}
+
+-- spawn your TextLabels (all anchored center)
+local labels = {}
+for i = 1, numTicks do
+	local lbl = Instance.new("TextLabel", compass)
+	lbl.Name               = "Tick"..i
+	lbl.AnchorPoint        = Vector2.new(0.5, 0.5)
+	lbl.Size               = UDim2.new(0, 40, 0, 24)   -- tweak width/height
+	lbl.Position           = UDim2.new(0.5, 0, 0.5, 0) -- start in center
+	lbl.BackgroundTransparency = 1
+	lbl.TextScaled         = true
+	lbl.Font               = Enum.Font.SourceSansBold
+	lbl.TextColor3         = Color3.new(98/255, 144/255, 184/255)
+	lbl.TextStrokeTransparency = 0
+	lbl.TextStrokeColor3 = Color3.new(67/255,67/255,67/255)
+	labels[i] = lbl
+end
+
+RunService.RenderStepped:Connect(function()
+	-- compute heading [0,360)
+	local raw = math.atan2(cam.CFrame.LookVector.X, cam.CFrame.LookVector.Z)
+	local heading = (math.deg(raw) + 360) % 360
+
+	-- figure the first tick’s degree so the ticks cover [heading-spanDeg/2 … heading+spanDeg/2]
+	local half = spanDeg/2
+	-- start at the nearest multiple of 15° below (heading - half)
+	local startDeg = (math.floor((heading - half)/15) * 15) % 360
+
+	for i, lbl in ipairs(labels) do
+		-- absolute degree for this tick
+		local deg = (startDeg + (i-1)*15) % 360
+
+		-- relative offset in [−180,180)
+		local rel = ((deg - heading + 540) % 360) - 180
+
+		if math.abs(rel) <= half then
+			lbl.Visible = true
+			-- normalized X: 0 → left edge, 1 → right edge
+			local ux = (rel / spanDeg) + 0.5
+			lbl.Position = UDim2.new(ux, 0, 0.5, 0)
+			-- show cardinal if exact, else numeric
+			lbl.Text = cards[deg] or tostring(deg)
+		else
+			lbl.Visible = false
+		end
+	end
+end)
