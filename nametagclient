@@ -1,0 +1,118 @@
+local Players         = game:GetService("Players")
+local ReplicatedStore = game:GetService("ReplicatedStorage")
+
+local debug = false
+
+local primaryGroupId = 6133446
+local divisionGroups = {
+	[6379659]  = "OA",
+	[6379574]  = "JURY",
+	[32657248] = "DEFENDER",
+	[6379605]  = "GRID",
+	[6379586]  = "HELIX",
+	[6893290]  = "OTA",
+}
+local defaultDivision = "UNION"
+
+local rankMap = {
+	Recruit                   = "RcT",
+	["i5 Protection Unit"]    = "i5",
+	["i4 Protection Unit"]    = "i4",
+	["i3 Protection Unit"]    = "i3",
+	["i2 Protection Unit"]    = "i2",
+	["i1 Protection Unit"]    = "i1",
+	["Field Officer"]         = "OfC",
+	["Elite Protection Unit"] = "EpU",
+	["Squadron Leader"]       = "SqL",
+	["Universal Architect"]   = "ArC",
+	["Division Leader"]       = "DvL",
+	["Rank Captain"]          = "RnC",
+	["Overwatch Commander"]   = "OwC",
+	["CCA Commander"]         = "CmD",
+	["Sectorial Commander"]   = "SeC",
+}
+
+local tagTemplate = ReplicatedStore:WaitForChild("NameTagTemplate")
+local localPlayer   = Players.LocalPlayer
+local mouse         = localPlayer:GetMouse()
+
+local _currentPlayer, _currentGui
+
+local function getTorso(char)
+	return char:FindFirstChild("UpperTorso")
+		or char:FindFirstChild("Torso")
+		or char:FindFirstChild("HumanoidRootPart")
+end
+
+local function createTag(plr, adornee)
+	local gui = tagTemplate:Clone()
+	gui.Adornee = adornee
+	gui.Parent  = adornee
+
+	local primaryLbl  = gui:FindFirstChild("Primary",  true)
+	local divisionLbl = gui:FindFirstChild("DIVISION", true)
+
+	local callsign = plr:GetAttribute("Callsign") or "????"
+
+	local last4    = plr.UserId % 10000
+
+	local primaryText, divisionText
+	if plr:IsInGroup(primaryGroupId) then
+		local roleName = plr:GetRoleInGroup(primaryGroupId)
+		local abbr     = rankMap[roleName] or roleName
+
+		primaryText    = ("D4:%s.%s.%s %04d"):format(abbr, plr.Name, callsign, last4)
+
+		divisionText = defaultDivision
+		for gid,name in pairs(divisionGroups) do
+			if plr:IsInGroup(gid) then
+				divisionText = name
+				break
+			end
+		end
+	else
+		primaryText  = "CIVILIAN"
+		divisionText = ""
+	end
+
+	if primaryLbl  then primaryLbl.Text  = primaryText  end
+	if divisionLbl then divisionLbl.Text = divisionText end
+
+	return gui
+end
+
+local function onMove()
+	local tgt = mouse.Target
+	if debug then
+		print("[NAMETAG]", tgt and tgt:GetFullName() or "nil")
+	end
+
+	local newP
+	if tgt then
+		local model = tgt:FindFirstAncestorOfClass("Model")
+		if model and model:FindFirstChild("Humanoid") then
+			newP = Players:GetPlayerFromCharacter(model)
+		end
+	end
+
+	if newP ~= _currentPlayer then
+		if _currentGui then
+			if debug then print("[NAMETAG] Clearing for", _currentPlayer.Name) end
+			_currentGui:Destroy()
+			_currentGui = nil
+		end
+		_currentPlayer = newP
+
+		if newP then
+			local torso = getTorso(newP.Character)
+			if torso then
+				if debug then print("[NAMETAG] Attaching to", torso.Name, "for", newP.Name) end
+				_currentGui = createTag(newP, torso)
+			elseif debug then
+				warn("[NAMETAG] No torso found for", newP.Name)
+			end
+		end
+	end
+end
+
+mouse.Move:Connect(onMove)
