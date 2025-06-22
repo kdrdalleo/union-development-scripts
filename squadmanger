@@ -1,0 +1,156 @@
+-- ServerScriptService/SquadManager.lua
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local Players           = game:GetService("Players")
+
+-- ** No WaitForChild here: we created them by hand in Studio **
+local M = ReplicatedStorage.SquadRemotes
+local CreateSquad, DeleteSquad, LeaveSquad,
+InvitePlayer, KickPlayer,
+AcceptInvite, DeclineInvite,
+SquadUpdate =
+	M.CreateSquad, M.DeleteSquad, M.LeaveSquad,
+M.InvitePlayer, M.KickPlayer,
+M.AcceptInvite, M.DeclineInvite,
+M.SquadUpdate
+
+-- Config
+local GROUP_ID, RANK_THRESHOLD = 6133446, 1 -- I2+
+
+-- In-memory squads: leaderUserId → { name, leader, members=set, invites=set }
+local squads = {}
+
+local function findSquadByMember(userId)
+	for lid, sq in pairs(squads) do
+		if sq.members[userId] then
+			return lid, sq
+		end
+	end
+end
+
+-- Build "CALLSIGN ####" from the player's Attribute
+local function formatDesignation(userId)
+	local plr = Players:GetPlayerByUserId(userId)
+	local base = (plr and plr:GetAttribute("Callsign")) or "UNKNOWN"
+	local s    = tostring(userId)
+	local last4 = (#s>=4) and s:sub(-4) or s
+	return base .. " " .. last4
+end
+
+-- Send one snapshot to a client
+local function sendSquadUpdate(plr, sq)
+	if not sq then
+		SquadUpdate:FireClient(plr, nil)
+		return
+	end
+
+	local payload = {
+		name       = sq.name,
+		leaderDes  = formatDesignation(sq.leader),
+		membersDes = {}
+	}
+
+	-- Only push non-leader members
+	for uid in pairs(sq.members) do
+		if uid ~= sq.leader then
+			table.insert(payload.membersDes, formatDesignation(uid))
+		end
+	end
+
+	SquadUpdate:FireClient(plr, payload)
+end
+
+-- Broadcast to whole squad
+local function broadcastSquad(sq)
+	for uid in pairs(sq.members) do
+		local m = Players:GetPlayerByUserId(uid)
+		if m then sendSquadUpdate(m, sq) end
+	end
+end
+
+-- === Handlers ===
+
+CreateSquad.OnServerEvent:Connect(function(plr, squadName)
+	if plr:GetRankInGroup(GROUP_ID) < RANK_THRESHOLD then return end
+	if findSquadByMember(plr.UserId) then return end
+
+	squads[plr.UserId] = {
+		name    = squadName or "",
+		leader  = plr.UserId,
+		members = { [plr.UserId] = true },
+		invites = {}
+	}
+	broadcastSquad(squads[plr.UserId])
+end)
+
+DeleteSquad.OnServerEvent:Connect(function(plr)
+	local sq = squads[plr.UserId]; if not sq then return end
+	for uid in pairs(sq.members) do
+		local m = Players:GetPlayerByUserId(uid)
+		if m then sendSquadUpdate(m, nil) end
+	end
+	squads[plr.UserId] = nil
+end)
+
+LeaveSquad.OnServerEvent:Connect(function(plr)
+	local lid, sq = findSquadByMember(plr.UserId); if not sq then return end
+
+	if plr.UserId == lid then
+		-- disband
+		for uid in pairs(sq.members) do
+			local m = Players:GetPlayerByUserId(uid)
+			if m then sendSquadUpdate(m, nil) end
+		end
+		squads[lid] = nil
+	else
+		sq.members[plr.UserId] = nil
+		sendSquadUpdate(plr, nil)
+		broadcastSquad(sq)
+	end
+end)
+
+InvitePlayer.OnServerEvent:Connect(function(plr, targetName)
+	local sq = squads[plr.UserId]; if not sq then return end
+	local total = 0
+	for _ in pairs(sq.members) do total += 1 end
+	for _ in pairs(sq.invites) do total += 1 end
+	if total >= 6 then return end
+
+	local t = Players:FindFirstChild(targetName)
+	if not (t and t.Team and t.Team.Name=="COMBINE") then return end
+
+	sq.invites[t.UserId] = true
+	InvitePlayer:FireClient(t, {
+		name   = sq.name,
+		leader = formatDesignation(plr.UserId)
+	})
+end)
+
+KickPlayer.OnServerEvent:Connect(function(plr, targetName)
+	local sq = squads[plr.UserId]; if not sq then return end
+	local t  = Players:FindFirstChild(targetName)
+	if not (t and sq.members[t.UserId]) then return end
+
+	sq.members[t.UserId] = nil
+	sendSquadUpdate(t, nil)
+	broadcastSquad(sq)
+end)
+
+AcceptInvite.OnServerEvent:Connect(function(plr)
+	for _, sq in pairs(squads) do
+		if sq.invites[plr.UserId] then
+			sq.invites[plr.UserId] = nil
+			sq.members[plr.UserId] = true
+			broadcastSquad(sq)
+			return
+		end
+	end
+end)
+
+DeclineInvite.OnServerEvent:Connect(function(plr)
+	for _, sq in pairs(squads) do
+		if sq.invites[plr.UserId] then
+			sq.invites[plr.UserId] = nil
+			return
+		end
+	end
+end)
