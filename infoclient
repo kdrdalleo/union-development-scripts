@@ -1,18 +1,13 @@
--- LocalScript under StarterGui/unionUI/InfoFrame
-
 local Players = game:GetService("Players")
 local player  = Players.LocalPlayer
 local info    = script.Parent
 
--- adjust these names if your TextLabels differ
 local unitIdLabel    = info:WaitForChild("UnitIdentification")
 local socioStatusLbl = info:WaitForChild("Sociostatus")
 local dispatchLbl    = info:WaitForChild("DispatchOrders")
 
--- pull the stored callsign attribute
 local callsign = player:GetAttribute("Callsign") or "UNKNOWN"
 
--- grab last 4 digits of the UserId (pad with zeros if needed)
 local idStr = tostring(player.UserId)
 local last4 = idStr:sub(-4)
 if #last4 < 4 then
@@ -21,5 +16,5 @@ end
 
 -- compose and assign
 unitIdLabel.Text    = "UNIT : : "..callsign .. "-" .. last4
-socioStatusLbl.Text = "SOCIOSTATUS : :"      -- leave blank for now
-dispatchLbl.Text    = "ORDERS : : NONE"      -- leave blank for now
+socioStatusLbl.Text = "SOCIOSTATUS : :" 
+dispatchLbl.Text    = "ORDERS : : NONE"
