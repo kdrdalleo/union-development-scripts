@@ -1,0 +1,37 @@
+
+local Players         = game:GetService("Players")
+local DataStoreService= game:GetService("DataStoreService")
+local callsignStore   = DataStoreService:GetDataStore("Callsigns")
+
+
+local callsigns = {
+	"HERO","LINE","PATROL","PRESSURE","QUICK","ROLLER","STICK","TAP","VICE","VICTOR",
+	"X-RAY","YELLOW","ZONE","APEX","BLADE","DAGGER","FIST","FLASH","GHOST","HAMMER",
+	"HUNTER","HURRICANE","ION","JET","JUDGE","KILO","LEADER","NOMAD","NOVA","PHANTOM",
+	"RANGER","REAPER","SAVAGE","SCAR","SLASH","SPEAR","STAB","STAR","STINGER","STORM",
+	"STRIKER","SWEEPER","SWIFT","SWORD","TRACKER","VAMP","WINDER"
+}
+
+Players.PlayerAdded:Connect(function(player)
+	local key = tostring(player.UserId)
+	local ok, stored = pcall(function()
+		return callsignStore:GetAsync(key)
+	end)
+
+	local myCallsign
+	if ok and stored then
+		myCallsign = stored
+	else
+		-- pick a random callsign (duplicates allowed)
+		myCallsign = callsigns[math.random(1, #callsigns)]
+		-- try to save it
+		local saveOk, err = pcall(function()
+			callsignStore:SetAsync(key, myCallsign)
+		end)
+		if not saveOk then
+			warn("Failed to save callsign for "..player.Name..": "..err)
+		end
+	end
+
+	player:SetAttribute("Callsign", myCallsign)
+end)
