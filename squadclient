@@ -1,0 +1,141 @@
+-- StarterGui/UnionUI/SquadClient.lua
+local Players           = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+
+local player = Players.LocalPlayer
+local ui     = player:WaitForChild("PlayerGui"):WaitForChild("UnionUI")
+
+-- Grab all your frames & controls
+local createF   = ui.CreateSquadFrame
+local deleteF   = ui.DeleteSquadFrame
+local settingsF = ui.SettingsSquadFrame
+local leaveF    = ui.LeaveSquadFrame
+local inviteF   = ui.SquadInvite
+local control   = ui.SquadControl
+local squadUI   = ui.Squad
+
+-- Buttons & inputs
+local btnCreate   = control["Create Squad"]
+local btnDelete   = control["Delete Squad"]
+local btnSettings = control["Squad Settings"]
+local btnLeave    = control["Leave Squad"]
+local txtName     = createF.nameinput
+local btnConfirmC = createF.CreateButton
+local btnConfirmD = deleteF.DeleteButton
+local txtInvite   = settingsF.InvitePlayerUsername
+local txtKick     = settingsF.KickPlayerUsername
+local btnConfirmL = leaveF.LeaveButton
+local acceptBtn   = inviteF.AcceptButton
+local declineBtn  = inviteF.DeclineButton
+local infoLabel   = inviteF["SquadName w/ Ldr"]
+local msgLabel    = inviteF.Message
+local deleteName  = deleteF.DeleteSquadName
+local leaveName   = leaveF.LeaveSquadName
+
+-- Remotes (no WaitForChild errors here either)
+local M       = ReplicatedStorage.SquadRemotes
+local RCreate = M.CreateSquad
+local RDelete = M.DeleteSquad
+local RLeave  = M.LeaveSquad
+local RInvite = M.InvitePlayer
+local RKick   = M.KickPlayer
+local RAccept = M.AcceptInvite
+local RDecline= M.DeclineInvite
+local RUpdate = M.SquadUpdate
+
+-- Hide everything
+for _,f in ipairs({createF,deleteF,settingsF,leaveF,inviteF}) do f.Visible = false end
+squadUI.Visible = false
+control["Create Squad"].Visible = (player:GetRankInGroup(6133446) or 0) >= 1
+
+-- BACK buttons
+for _,f in ipairs({createF,deleteF,settingsF,leaveF}) do
+	f.BACK.Activated:Connect(function() f.Visible = false end)
+end
+
+-- Control hookups
+btnCreate.Activated:Connect(function() createF.Visible   = true end)
+btnDelete.Activated:Connect(function() deleteF.Visible   = true end)
+btnSettings.Activated:Connect(function() settingsF.Visible = true end)
+btnLeave.Activated:Connect(function() leaveF.Visible    = true end)
+
+btnConfirmC.Activated:Connect(function()
+	if txtName.Text~="" then RCreate:FireServer(txtName.Text) end
+	txtName.Text, createF.Visible = "", false
+end)
+btnConfirmD.Activated:Connect(function()
+	RDelete:FireServer(); deleteF.Visible = false
+end)
+txtInvite.FocusLost:Connect(function(enter)
+	if enter and txtInvite.Text~="" then
+		RInvite:FireServer(txtInvite.Text)
+		txtInvite.Text = ""
+	end
+end)
+txtKick.FocusLost:Connect(function(enter)
+	if enter and txtKick.Text~="" then
+		RKick:FireServer(txtKick.Text)
+		txtKick.Text = ""
+	end
+end)
+btnConfirmL.Activated:Connect(function()
+	RLeave:FireServer(); leaveF.Visible = false
+end)
+
+-- Invite popup
+RInvite.OnClientEvent:Connect(function(data)
+	local nm = tostring(data.name or "")
+	local ld = tostring(data.leader or "")
+	infoLabel.Text = nm.." / "..ld
+	msgLabel.Text  = "You have been invited to join squad "..nm
+	inviteF.Visible = true
+end)
+acceptBtn.Activated:Connect(function() RAccept:FireServer(); inviteF.Visible=false end)
+declineBtn.Activated:Connect(function() RDecline:FireServer(); inviteF.Visible=false end)
+
+-- Squad update handler
+RUpdate.OnClientEvent:Connect(function(data)
+	if not data then
+		control["Create Squad"].Visible   = (player:GetRankInGroup(6133446) or 0) >= 1
+		control["Delete Squad"].Visible   = false
+		control["Squad Settings"].Visible = false
+		control["Leave Squad"].Visible    = false
+		squadUI.Visible = false
+		return
+	end
+
+	-- extract safely
+	local squadName  = tostring(data.name or "")
+	local leaderDes  = tostring(data.leaderDes or "")
+	local membersDes = data.membersDes or {}
+
+	-- show
+	control["Create Squad"].Visible   = false
+	control["Delete Squad"].Visible   = true
+	control["Squad Settings"].Visible = true
+	control["Leave Squad"].Visible    = true
+	squadUI.Visible = true
+
+	-- update headers
+	deleteName.Text = "TEAM : : "..squadName
+	leaveName.Text  = "TEAM : : "..squadName
+
+	-- collect TextLabels
+	local labels = {}
+	for _,c in ipairs(squadUI:GetChildren()) do
+		if c:IsA("TextLabel") then table.insert(labels,c) end
+	end
+
+	-- populate
+	labels[1].Text = "TEAM : : "..squadName
+	labels[2].Text = leaderDes
+
+	local idx = 3
+	for _,des in ipairs(membersDes) do
+		labels[idx].Text = tostring(des)
+		idx += 1
+	end
+	for i=idx,#labels do
+		labels[i].Text = ""
+	end
+end)
